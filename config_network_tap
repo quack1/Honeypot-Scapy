@@ -1,0 +1,6 @@
+sudo brctl addbr vers_eth0
+sudo brctl setfd vers_eth0 0
+sudo brctl addif vers_eth0 eth0
+sudo ip link set vers_eth0 up
+sudo ip addr flush dev eth0
+sudo dhclient vers_eth0

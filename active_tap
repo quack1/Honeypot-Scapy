@@ -1,0 +1,2 @@
+sudo ip link set TAP_INTER up
+sudo brctl addif vers_eth0 TAP_INTER
