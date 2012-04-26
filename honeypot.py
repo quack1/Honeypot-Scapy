@@ -19,7 +19,7 @@ TUNSETIFF = 0x400454CA
 IFF_TUN = 0x0001
 IFF_TAP = 0x0002
 IFF_NO_PI = 0x1000
-ADRESSE_IP = "192.168.1.42"
+ADRESSE_IP = "172.16.229.42"
 ADRESSE_MAC = ""
 _ARP = 'arp'
 _ICMP = 'icmp'
@@ -35,24 +35,18 @@ _NULL = 'nil'
 def getMacAdress():
 	return commands.getoutput("ip -o link show %s"%INTERFACE_NAME).split(' ')[-3]
 def getTrameType(trame):
-	# Ethertype = 0x806 ==> ARP
 	if hex(trame.type) == '0x806' and trame.dst.upper() == "FF:FF:FF:FF:FF:FF" :
 		return _ARP
-	# Ethertype = 0x800 ==> IP
-	elif int(trame.type) == 2048 :
-		if trame['IP'].proto.upper() == 1:
-			print "ICMP"
-			if trame['IP']['ICMP'].type == 8 : 
-				return _ICMP
-		elif trame['IP'].proto == 6 :
-			if trame['TCP'].dport == 22:
-				return _SSH
-			elif trame['TCP'].dport == 80:
-				return _HTTP
-			else:
-				return _TCP_NULL			
-	else:
-		return _NULL
+	trame.show()
+	if trame.type == 2048 and trame['IP'].proto == 1 and trame['IP']['ICMP'].type == 8 : 
+		return _ICMP
+	if trame.type == 2048 and trame['IP'].proto == 6 and trame['TCP'].dport == 22:
+		return _SSH
+	if trame.type == 2048 and trame['IP'].proto == 6 and trame['TCP'].dport == 80:
+		return _HTTP
+	if trame.type == 2048 and trame['IP'].proto == 6 :
+		return _TCP_NULL			
+	return _NULL
 
 #-----------------------------
 #		Début du script
@@ -71,24 +65,24 @@ while runAgain:
 	packet = os.read(link, 2048)
 	trame = Ether(packet)
 	clientMacAdress = trame.src
+	#trame.show()
 	trameType = getTrameType(trame)
 	if trameType == _ARP:
 		# Receive an ARP request : send an ARP response
 		clientIpAdress=trame['ARP'].psrc
 		print "Receiving ARP request from %s@%s"%(clientIpAdress,clientMacAdress)
 		response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/ARP(op='is-at',hwsrc=ADRESSE_MAC,psrc=ADRESSE_IP,hwdst=clientMacAdress,pdst=clientIpAdress)
+		#response.show()
 		os.write(link, str(response))
-	elif trameType == _ICMP:
+		continue
+	if trameType == _ICMP:
 		# Receive an ICMP echo-request : send an ICMP echo-reply
 		clientIpAdress = trame['IP'].src
 		print "Receiving ICMP request from %s@%s"%(clientIpAdress,clientMacAdress)
 		response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)/ICMP(type='echo-reply',code=0,id=trame['ICMP'].id,seq=trame['ICMP'].seq)
-		print "\tRequest : "
-		trame.show()
-		print "\tResponse : "
-		response.show()
 		os.write(link, str(response))
-	elif trameType == _SSH:
+		continue
+	if trameType == _SSH:
 		# Receive a TCP segment, on port 22
 		clientIpAdress = trame['IP'].src
 		print "Receiving TCP on port 22"
@@ -97,19 +91,22 @@ while runAgain:
 			print "Receiving TCP SYN request from %s@%s on SSH port 22"%(clientIpAdress,clientMacAdress)
 			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)/TCP(dport=trame['TCP'].sport,sport=22,flags='SA',seq=random.randint(1,45536),ack=int(trame['TCP'].seq)+1)
 			os.write(link, str(response))
-		elif trame['TCP'].flags == 'A':
+			continue
+		if trame['TCP'].flags == 'A':
 			# Receive ACK flag : Send server banner, and then stop connexion
 			print "Receiving TCP ACK segment from %s@%s on SSH port 22"%(clientIpAdress,clientMacAdress)
 			size = trame['IP'].len - (trame['IP'].ihl*4 + trame['TCP'].dataofs*4 )
 			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)/TCP(dport=trame['TCP'].sport,sport=22,flags='PA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+size)/"ssh-1.99-2.2.0\r\n"
 			os.write(link, str(response))
-	elif trameType == _TCP_NULL:
+			continue
+	if trameType == _TCP_NULL:
 		# Receive a TCP segment, on an unsupported port : send a Reset-Ack segment
 		clientIpAdress = trame['IP'].src
 		print "Receiving TCP Syn request from %s@%s on unsupported port %d"%(clientIpAdress,clientMacAdress,trame['TCP'].dport)
 		response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='RA',ack=int(trame['TCP'].seq)+1)
 		os.write(link, str(response))
-	elif trameType == _NULL:
+		continue
+	if trameType == _NULL:
 		print "Not yet supported"
 	
 	
