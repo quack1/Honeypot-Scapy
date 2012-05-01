@@ -28,6 +28,7 @@ _SSH = 'ssh'
 _HTTP = 'http'
 _TCP_NULL = 'tcp_null'
 _NULL = 'nil'
+_SSH_HEADER = "ssh-1.99-2.2.0\r\n"
 
 #-----------------------------
 #			 Fonctions
@@ -85,24 +86,45 @@ while runAgain:
 	if trameType == _SSH:
 		# Receive a TCP segment, on port 22
 		clientIpAdress = trame['IP'].src
-		print "Receiving TCP on port 22"
+		print "Receiving TCP on port 22,ssh"
 		if trame['TCP'].flags == 'S':
 			# Receive SYN flag : send SYN/ACK
 			print "Receiving TCP SYN request from %s@%s on SSH port 22"%(clientIpAdress,clientMacAdress)
-			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)/TCP(dport=trame['TCP'].sport,sport=22,flags='SA',seq=random.randint(1,45536),ack=int(trame['TCP'].seq)+1)
+			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
+			response = response/TCP(dport=trame['TCP'].sport,sport=22,flags='SA',seq=random.randint(1,45536),ack=int(trame['TCP'].seq)+1)
 			os.write(link, str(response))
 			continue
 		if trame['TCP'].flags == 'A':
 			# Receive ACK flag : Send server banner, and then stop connexion
 			print "Receiving TCP ACK segment from %s@%s on SSH port 22"%(clientIpAdress,clientMacAdress)
 			size = trame['IP'].len - (trame['IP'].ihl*4 + trame['TCP'].dataofs*4 )
-			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)/TCP(dport=trame['TCP'].sport,sport=22,flags='PA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+size)/"ssh-1.99-2.2.0\r\n"
+			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
+			response = response/TCP(dport=trame['TCP'].sport,sport=22,flags='PA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+size)/"%s"%_SSH_HEADER
+			os.write(link, str(response))
+			continue
+	if trameType == _HTTP:
+		# Receive a TCP segment, on port 80
+		clientIpAdress = trame['IP'].src
+		print "Receiving TCP on port 80,http"
+		if trame['TCP'].flags == 'S':
+			# Receive SYN flag : send SYN/ACK
+			print "Receiving TCP SYN request from %s@%s on HTTP port 80"%(clientIpAdress,clientMacAdress)
+			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
+			response = response/TCP(dport=trame['TCP'].sport,sport=80,flags='SA',seq=random.randint(1,45536),ack=int(trame['TCP'].seq)+1)
+			os.write(link, str(response))
+			continue
+		if trame['TCP'].flags == 'A':
+			# Receive ACK flag.
+			print "Receiving TCP ACK segment from %s@%s on HTTP port 80"%(clientIpAdress,clientMacAdress)
+			size = trame['IP'].len - (trame['IP'].ihl*4 + trame['TCP'].dataofs*4 )
+			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
+			response = response/TCP(dport=trame['TCP'].sport,sport=80,flags='PA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+size)
 			os.write(link, str(response))
 			continue
 	if trameType == _TCP_NULL:
 		# Receive a TCP segment, on an unsupported port : send a Reset-Ack segment
 		clientIpAdress = trame['IP'].src
-		print "Receiving TCP Syn request from %s@%s on unsupported port %d"%(clientIpAdress,clientMacAdress,trame['TCP'].dport)
+		print "Receiving TCP Syn request from %s@%s on an unsupported port %d"%(clientIpAdress,clientMacAdress,trame['TCP'].dport)
 		response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='RA',ack=int(trame['TCP'].seq)+1)
 		os.write(link, str(response))
 		continue
