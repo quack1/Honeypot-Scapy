@@ -109,9 +109,6 @@ while runAgain:
 			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
 			response = response/TCP(dport=trame['TCP'].sport,sport=22,flags='FA',seq=int(trame['TCP'].ack)+len(_SSH_HEADER),ack=ackValue)
 			os.write(link, str(response))
-<<<<<<< HEAD
-					
-=======
 			
 		elif 'F' in trame.sprintf('%TCP.flags%'):
 			# Receive FIN flag : send FIN/ACK
@@ -119,7 +116,6 @@ while runAgain:
 			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
 			response = response/TCP(dport=trame['TCP'].sport,sport=22,flags='FA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+1)
 			os.write(link, str(response))
->>>>>>> 435d3d2939e62bf1943a6fcf99207307fc8e8688
 			
 	elif trameType == _HTTP:
 		# Receive a TCP segment, on port 80
