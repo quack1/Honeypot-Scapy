@@ -110,6 +110,12 @@ while runAgain:
 			response = response/TCP(dport=trame['TCP'].sport,sport=22,flags='FA',seq=int(trame['TCP'].ack)+len(_SSH_HEADER),ack=ackValue)
 			os.write(link, str(response))
 			
+		elif 'F' in trame.sprintf('%TCP.flags%'):
+			# Receive FIN flag : send FIN/ACK
+			print "Receiving TCP SYN request from %s@%s on SSH port 22"%(clientIpAdress,clientMacAdress)
+			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
+			response = response/TCP(dport=trame['TCP'].sport,sport=22,flags='FA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+1)
+			os.write(link, str(response))
 			
 	elif trameType == _HTTP:
 		# Receive a TCP segment, on port 80
