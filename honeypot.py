@@ -38,7 +38,6 @@ def getMacAdress():
 def getTrameType(trame):
 	if hex(trame.type) == '0x806' and trame.dst.upper() == "FF:FF:FF:FF:FF:FF" :
 		return _ARP
-	trame.show()
 	if trame.type == 2048 and trame['IP'].proto == 1 and trame['IP']['ICMP'].type == 8 : 
 		return _ICMP
 	if trame.type == 2048 and trame['IP'].proto == 6 and trame['TCP'].dport == 22:
@@ -73,7 +72,6 @@ while runAgain:
 		clientIpAdress=trame['ARP'].psrc
 		print "Receiving ARP request from %s@%s"%(clientIpAdress,clientMacAdress)
 		response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/ARP(op='is-at',hwsrc=ADRESSE_MAC,psrc=ADRESSE_IP,hwdst=clientMacAdress,pdst=clientIpAdress)
-		#response.show()
 		os.write(link, str(response))
 		continue
 	if trameType == _ICMP:
@@ -87,20 +85,24 @@ while runAgain:
 		# Receive a TCP segment, on port 22
 		clientIpAdress = trame['IP'].src
 		print "Receiving TCP on port 22,ssh"
-		if trame['TCP'].flags == 'S':
+		#if trame['TCP'].flags == 'S':
+		if 'S' in trame['TCP'].flags:
 			# Receive SYN flag : send SYN/ACK
 			print "Receiving TCP SYN request from %s@%s on SSH port 22"%(clientIpAdress,clientMacAdress)
 			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
 			response = response/TCP(dport=trame['TCP'].sport,sport=22,flags='SA',seq=random.randint(1,45536),ack=int(trame['TCP'].seq)+1)
 			os.write(link, str(response))
 			continue
-		if trame['TCP'].flags == 'A':
+		if 'A' in trame['TCP'].flags :
 			# Receive ACK flag : Send server banner, and then stop connexion
 			print "Receiving TCP ACK segment from %s@%s on SSH port 22"%(clientIpAdress,clientMacAdress)
 			size = trame['IP'].len - (trame['IP'].ihl*4 + trame['TCP'].dataofs*4 )
+			ackValue = int(trame['TCP'].seq)+size
 			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-			response = response/TCP(dport=trame['TCP'].sport,sport=22,flags='PA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+size)/"%s"%_SSH_HEADER
+			response = response/TCP(dport=trame['TCP'].sport,sport=22,flags='PA',seq=int(trame['TCP'].ack),ack=ackValue)/"%s"%_SSH_HEADER
 			os.write(link, str(response))
+			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
+                        response = response/TCP(dport=trame['TCP'].sport,sport=22,flags='FA',seq=int(trame['TCP'].ack)+len(_SSH_HEADER),ack=ackValue)/"%s"%_SSH_HEADER
 			continue
 	if trameType == _HTTP:
 		# Receive a TCP segment, on port 80
