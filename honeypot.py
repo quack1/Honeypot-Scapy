@@ -29,6 +29,7 @@ _HTTP = 'http'
 _TCP_NULL = 'tcp_null'
 _NULL = 'nil'
 _SSH_HEADER = "ssh-1.99-2.2.0\r\n"
+_HTTP_HEADER = "HTTP/1.0 200 ok\r\nServer: Apache/2.0.46 (Unix) (Red Hat/Linux)\r\nContent-type: text/html\r\n\r\n"
 
 #-----------------------------
 #			 Fonctions
@@ -103,7 +104,7 @@ while runAgain:
 			ackValue = int(trame['TCP'].seq)+size
 			
 			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-			response = response/TCP(dport=trame['TCP'].sport,sport=22,flags='PA',seq=int(trame['TCP'].ack),ack=ackValue)/"ssh-1.99-2.2.0\r\n"
+			response = response/TCP(dport=trame['TCP'].sport,sport=22,flags='PA',seq=int(trame['TCP'].ack),ack=ackValue)/_SSH_HEADER
 			os.write(link, str(response))
 			
 			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
@@ -119,7 +120,6 @@ while runAgain:
 			
 	elif trameType == _HTTP:
 		# Receive a TCP segment, on port 80
-		continue
 		clientIpAdress = trame['IP'].src
 		print "Receiving TCP on port 80,http"
 		
@@ -136,6 +136,22 @@ while runAgain:
 			size = trame['IP'].len - (trame['IP'].ihl*4 + trame['TCP'].dataofs*4 )
 			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
 			response = response/TCP(dport=trame['TCP'].sport,sport=80,flags='PA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+size)
+			os.write(link, str(response))
+			
+		elif "P" in trame.sprintf('%TCP.flags%') :
+			# Receive PUSH flag : Http request.
+			print "Receiving TCP ACK segment from %s@%s on HTTP port 80"%(clientIpAdress,clientMacAdress)
+			size = trame['IP'].len - (trame['IP'].ihl*4 + trame['TCP'].dataofs*4 )
+			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
+			response = response/TCP(dport=trame['TCP'].sport,sport=80,flags='A',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+size)
+			os.write(link, str(response))
+
+			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
+			response = response/TCP(dport=trame['TCP'].sport,sport=80,flags='PA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+size)/_HTTP_HEADER
+			os.write(link, str(response))
+
+			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
+			response = response/TCP(dport=trame['TCP'].sport,sport=80,flags='FA',seq=int(trame['TCP'].ack)+len(_HTTP_HEADER),ack=int(trame['TCP'].seq)+1)
 			os.write(link, str(response))
 			
 			
