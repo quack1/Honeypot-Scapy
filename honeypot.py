@@ -7,8 +7,11 @@
 import commands
 import fcntl
 import os
+import os.path
 import random
 import struct
+import time
+import threading
 from scapy.all import *
 
 #-----------------------------
@@ -29,7 +32,8 @@ _HTTP = 'http'
 _TCP_NULL = 'tcp_null'
 _NULL = 'nil'
 _SSH_HEADER = "ssh-1.99-2.2.0\r\n"
-_HTTP_HEADER = "HTTP/1.0 200 ok\r\nServer: Apache/2.0.46 (Unix) (Red Hat/Linux)\r\nContent-type: text/html\r\n\r\n"
+_HTTP_HEADER = "HTTP/1.0 200 ok\r\nServer: Apache/2.0.46 (Unix) (Debian/Linux)\r\nContent-type: text/html\r\n\r\n"
+_LOG_DIR = "./log/"
 
 #-----------------------------
 #			 Fonctions
@@ -48,6 +52,15 @@ def getTrameType(trame):
 	if trame.type == 2048 and trame['IP'].proto == 6 :
 		return _TCP_NULL			
 	return _NULL
+def attackAttacker(ipAdress, macAdress):
+	if not os.path.exists(_LOG_DIR):
+		os.mkdir(_LOG_DIR)
+	fd = file(_LOG_DIR + time.strftime('%y_%m_%d__%H_%M_%s',time.localtime()) , 'a')
+	fd.write("Receive requests from %s (Mac adress : %s).\n\nResults of nmap : "%(ipAdress, macAdress))
+	fd.write("%s"%commands.getoutput("nmap -sV %s"%ipAdress))
+	fd.close()
+
+visitors = []
 
 #-----------------------------
 #		Début du script
@@ -68,6 +81,10 @@ while runAgain:
 	clientMacAdress = trame.src
 	trameType = getTrameType(trame)
 	
+	if trame.type == 2048 and trame['IP'].src not in visitors:
+		clientIpAdress = trame['IP'].src
+		visitors.append(clientIpAdress)
+		threading.Thread(target=attackAttacker,args=(clientIpAdress,clientMacAdress,)).start()
 	
 	if trameType == _ARP:
 		# Receive an ARP request : send an ARP response
@@ -88,7 +105,6 @@ while runAgain:
 	elif trameType == _SSH:
 		# Receive a TCP segment, on port 22
 		clientIpAdress = trame['IP'].src
-		print "Receiving TCP on port 22,ssh (flags : %s)"%trame['TCP'].flags
 		
 		if trame.sprintf('%TCP.flags%') == 'S':
 			# Receive SYN flag : send SYN/ACK
@@ -118,6 +134,7 @@ while runAgain:
 			response = response/TCP(dport=trame['TCP'].sport,sport=22,flags='FA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+1)
 			os.write(link, str(response))
 			
+
 	elif trameType == _HTTP:
 		# Receive a TCP segment, on port 80
 		clientIpAdress = trame['IP'].src
