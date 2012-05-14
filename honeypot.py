@@ -30,13 +30,16 @@ _TCP = 'tcp'
 _SSH = 'ssh'
 _HTTP = 'http'
 _SMTP = 'smtp'
-_DNS = 'dns'
+_IMAP = 'imap'
+_FTP = 'ftp'
 _TCP_NULL = 'tcp_null'
 _NULL = 'nil'
-_SSH_HEADER = "ssh-1.99-2.2.0\r\n"
+_SSH_HEADER = "SSH-2.0-OpenSSH_5.9p1 Debian-5ubuntu1\r\n"
 _HTTP_HEADER = "HTTP/1.0 200 ok\r\nServer: Apache/2.0.46 (Unix) (Debian/Linux)\r\nContent-type: text/html\r\n\r\n"
 _SMTP_HEADER = "220 %s ESMTP Postfix (2.0.13) (Debian Linux)\r\n"%(ADRESSE_IP)
 _LOG_DIR = "./log/"
+_IMAP_HEADER = '* OK 192.168.1.42 Cyrus IMAP v2.3.2-Debian-2.3.2 server ready\r\n'
+_FTP_HEADER = "220---------- Welcome to Pure-FTPd [privsep] [TLS] ----------\r\n"
 
 #-----------------------------
 #			 Fonctions
@@ -54,8 +57,10 @@ def getTrameType(trame):
 		return _SMTP
 	if trame.type == 2048 and trame['IP'].proto == 6 and trame['TCP'].dport == 80:
 		return _HTTP
-	if trame.type == 2048 and trame['IP'].proto == 6 and trame['TCP'].dport == 53:
-		return _UDP
+	if trame.type == 2048 and trame['IP'].proto == 6 and trame['TCP'].dport == 143:
+		return _IMAP
+	if trame.type == 2048 and trame['IP'].proto == 6 and trame['TCP'].dport == 21:
+		return _FTP
 	if trame.type == 2048 and trame['IP'].proto == 6 :
 		return _TCP_NULL			
 	return _NULL
@@ -203,24 +208,71 @@ while runAgain:
 			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
 			response = response/TCP(dport=trame['TCP'].sport,sport=25,flags='FA',seq=int(trame['TCP'].ack)+len(_SMTP_HEADER),ack=ackValue)
 			os.write(link, str(response))
-			
-		elif 'F' in trame.sprintf('%TCP.flags%'):
-			# Receive FIN flag : send FIN/ACK
-			print "Receiving TCP FIN request from %s@%s on SMTP port 25"%(clientIpAdress,clientMacAdress)
-			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-			response = response/TCP(dport=trame['TCP'].sport,sport=25,flags='FA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+1)
-			os.write(link, str(response))
-			
-			
-	elif trameType == _UDP:
-		# Receive a TCP segment, on port 53
+		
+		
+	elif trameType == _IMAP:
+		# Receive a TCP segment, on port 143
 		clientIpAdress = trame['IP'].src
 		
 		if trame.sprintf('%TCP.flags%') == 'S':
 			# Receive SYN flag : send SYN/ACK
-			print "Receiving TCP SYN request from %s@%s on DNS port 53"%(clientIpAdress,clientMacAdress)
+			print "Receiving TCP SYN request from %s@%s on IMAP port 143"%(clientIpAdress,clientMacAdress)
 			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-			response = response/TCP(dport=trame['TCP'].sport,sport=53,flags='SA',seq=random.randint(1,45536),ack=int(trame['TCP'].seq)+1)
+			response = response/TCP(dport=trame['TCP'].sport,sport=143,flags='SA',seq=random.randint(1,45536),ack=int(trame['TCP'].seq)+1)
+			os.write(link, str(response))
+			
+		elif trame.sprintf('%TCP.flags%') == 'A':
+			# Receive ACK flag : Send server banner, and then stop connexion
+			print "Receiving TCP ACK segment from %s@%s on IMAP port 143"%(clientIpAdress,clientMacAdress)
+			size = trame['IP'].len - (trame['IP'].ihl*4 + trame['TCP'].dataofs*4 )
+			ackValue = int(trame['TCP'].seq)+size
+			
+			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
+			response = response/TCP(dport=trame['TCP'].sport,sport=143,flags='PA',seq=int(trame['TCP'].ack),ack=ackValue)/_IMAP_HEADER
+			os.write(link, str(response))
+			
+			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
+			response = response/TCP(dport=trame['TCP'].sport,sport=143,flags='FA',seq=int(trame['TCP'].ack)+len(_IMAP_HEADER),ack=ackValue)
+			os.write(link, str(response))
+			
+		elif 'F' in trame.sprintf('%TCP.flags%'):
+			# Receive FIN flag : send FIN/ACK
+			print "Receiving TCP FIN request from %s@%s on IMAP port 143"%(clientIpAdress,clientMacAdress)
+			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
+			response = response/TCP(dport=trame['TCP'].sport,sport=143,flags='FA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+1)
+			os.write(link, str(response))
+		
+		
+	elif trameType == _FTP:
+		# Receive a TCP segment, on port 21
+		clientIpAdress = trame['IP'].src
+		
+		if trame.sprintf('%TCP.flags%') == 'S':
+			# Receive SYN flag : send SYN/ACK
+			print "Receiving TCP SYN request from %s@%s on FTP port 21"%(clientIpAdress,clientMacAdress)
+			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
+			response = response/TCP(dport=trame['TCP'].sport,sport=21,flags='SA',seq=random.randint(1,45536),ack=int(trame['TCP'].seq)+1)
+			os.write(link, str(response))
+			
+		elif trame.sprintf('%TCP.flags%') == 'A':
+			# Receive ACK flag : Send server banner, and then stop connexion
+			print "Receiving TCP ACK segment from %s@%s on FTP port 21"%(clientIpAdress,clientMacAdress)
+			size = trame['IP'].len - (trame['IP'].ihl*4 + trame['TCP'].dataofs*4 )
+			ackValue = int(trame['TCP'].seq)+size
+			
+			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
+			response = response/TCP(dport=trame['TCP'].sport,sport=21,flags='PA',seq=int(trame['TCP'].ack),ack=ackValue)/_FTP_HEADER
+			os.write(link, str(response))
+			
+			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
+			response = response/TCP(dport=trame['TCP'].sport,sport=21,flags='FA',seq=int(trame['TCP'].ack)+len(_FTP_HEADER),ack=ackValue)
+			os.write(link, str(response))
+			
+		elif 'F' in trame.sprintf('%TCP.flags%'):
+			# Receive FIN flag : send FIN/ACK
+			print "Receiving TCP FIN request from %s@%s on FTP port 21"%(clientIpAdress,clientMacAdress)
+			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
+			response = response/TCP(dport=trame['TCP'].sport,sport=21,flags='FA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+1)
 			os.write(link, str(response))
 	
 	
