@@ -30,11 +30,12 @@ _TCP = 'tcp'
 _SSH = 'ssh'
 _HTTP = 'http'
 _SMTP = 'smtp'
+_DNS = 'dns'
 _TCP_NULL = 'tcp_null'
 _NULL = 'nil'
 _SSH_HEADER = "ssh-1.99-2.2.0\r\n"
 _HTTP_HEADER = "HTTP/1.0 200 ok\r\nServer: Apache/2.0.46 (Unix) (Debian/Linux)\r\nContent-type: text/html\r\n\r\n"
-_SMTP_HEADER = "220 example.com ESMTP Postfix (2.0.13) (Debian Linux)"
+_SMTP_HEADER = "220 %s ESMTP Postfix (2.0.13) (Debian Linux)\r\n"%(ADRESSE_IP)
 _LOG_DIR = "./log/"
 
 #-----------------------------
@@ -53,6 +54,8 @@ def getTrameType(trame):
 		return _SMTP
 	if trame.type == 2048 and trame['IP'].proto == 6 and trame['TCP'].dport == 80:
 		return _HTTP
+	if trame.type == 2048 and trame['IP'].proto == 6 and trame['TCP'].dport == 53:
+		return _UDP
 	if trame.type == 2048 and trame['IP'].proto == 6 :
 		return _TCP_NULL			
 	return _NULL
@@ -209,6 +212,18 @@ while runAgain:
 			os.write(link, str(response))
 			
 			
+	elif trameType == _UDP:
+		# Receive a TCP segment, on port 53
+		clientIpAdress = trame['IP'].src
+		
+		if trame.sprintf('%TCP.flags%') == 'S':
+			# Receive SYN flag : send SYN/ACK
+			print "Receiving TCP SYN request from %s@%s on DNS port 53"%(clientIpAdress,clientMacAdress)
+			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
+			response = response/TCP(dport=trame['TCP'].sport,sport=53,flags='SA',seq=random.randint(1,45536),ack=int(trame['TCP'].seq)+1)
+			os.write(link, str(response))
+	
+	
 	elif trameType == _TCP_NULL:
 		# Receive a TCP segment, on an unsupported port : send a Reset-Ack segment
 		clientIpAdress = trame['IP'].src
