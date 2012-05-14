@@ -29,10 +29,12 @@ _ICMP = 'icmp'
 _TCP = 'tcp'
 _SSH = 'ssh'
 _HTTP = 'http'
+_SMTP = 'smtp'
 _TCP_NULL = 'tcp_null'
 _NULL = 'nil'
 _SSH_HEADER = "ssh-1.99-2.2.0\r\n"
 _HTTP_HEADER = "HTTP/1.0 200 ok\r\nServer: Apache/2.0.46 (Unix) (Debian/Linux)\r\nContent-type: text/html\r\n\r\n"
+_SMTP_HEADER = "220 example.com ESMTP Postfix (2.0.13) (Debian Linux)"
 _LOG_DIR = "./log/"
 
 #-----------------------------
@@ -47,6 +49,8 @@ def getTrameType(trame):
 		return _ICMP
 	if trame.type == 2048 and trame['IP'].proto == 6 and trame['TCP'].dport == 22:
 		return _SSH
+	if trame.type == 2048 and trame['IP'].proto == 6 and trame['TCP'].dport == 25:
+		return _SMTP
 	if trame.type == 2048 and trame['IP'].proto == 6 and trame['TCP'].dport == 80:
 		return _HTTP
 	if trame.type == 2048 and trame['IP'].proto == 6 :
@@ -169,6 +173,39 @@ while runAgain:
 
 			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
 			response = response/TCP(dport=trame['TCP'].sport,sport=80,flags='FA',seq=int(trame['TCP'].ack)+len(_HTTP_HEADER),ack=int(trame['TCP'].seq)+1)
+			os.write(link, str(response))
+		
+		
+	elif trameType == _SMTP:
+		# Receive a TCP segment, on port 25
+		clientIpAdress = trame['IP'].src
+		
+		if trame.sprintf('%TCP.flags%') == 'S':
+			# Receive SYN flag : send SYN/ACK
+			print "Receiving TCP SYN request from %s@%s on SMTP port 25"%(clientIpAdress,clientMacAdress)
+			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
+			response = response/TCP(dport=trame['TCP'].sport,sport=25,flags='SA',seq=random.randint(1,45536),ack=int(trame['TCP'].seq)+1)
+			os.write(link, str(response))
+			
+		elif trame.sprintf('%TCP.flags%') == 'A':
+			# Receive ACK flag : Send server banner, and then stop connexion
+			print "Receiving TCP ACK segment from %s@%s on SMTP port 25"%(clientIpAdress,clientMacAdress)
+			size = trame['IP'].len - (trame['IP'].ihl*4 + trame['TCP'].dataofs*4 )
+			ackValue = int(trame['TCP'].seq)+size
+			
+			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
+			response = response/TCP(dport=trame['TCP'].sport,sport=25,flags='PA',seq=int(trame['TCP'].ack),ack=ackValue)/_SMTP_HEADER
+			os.write(link, str(response))
+			
+			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
+			response = response/TCP(dport=trame['TCP'].sport,sport=25,flags='FA',seq=int(trame['TCP'].ack)+len(_SMTP_HEADER),ack=ackValue)
+			os.write(link, str(response))
+			
+		elif 'F' in trame.sprintf('%TCP.flags%'):
+			# Receive FIN flag : send FIN/ACK
+			print "Receiving TCP FIN request from %s@%s on SMTP port 25"%(clientIpAdress,clientMacAdress)
+			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
+			response = response/TCP(dport=trame['TCP'].sport,sport=25,flags='FA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+1)
 			os.write(link, str(response))
 			
 			
