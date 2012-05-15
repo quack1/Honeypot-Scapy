@@ -40,9 +40,6 @@ _IMAP = 'imap'
 
 _LOG_DIR = "./log/"
 
-reg_httpGetRoot = re.compile(r"GET / HTTP(.*)")
-reg_httpGetDefault = re.compile(r"GET /(.*) HTTP(.*)")
-
 #-----------------------------
 #			 Fonctions
 #-----------------------------
@@ -137,16 +134,9 @@ while runAgain:
 					
 		elif trame.sprintf('%TCP.flags%') == 'A':
 			if trameType in (_SSH, _SMTP, _IMAP, _FTP):
-				tcpResponse.ackAndSend(trame, trameType)
+				tcpResponse.ackAndSend(trame, trameType, ADRESSE_MAC, link)
 			elif trameType in(_HTTP):
-				tcpReponse.getAndSend(trame, trameType)
-							
-		elif trame.sprintf('%TCP.flags%') == "FA":
-			# Receive FIN flag : send FIN/ACK
-			print "Receiving TCP FIN-ACK request from %s@%s on port %s"%(clientIpAdress,clientMacAdress, trame['TCP'].dport)
-			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-			response = response/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='A',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+1)
-			sendPaquet(response)
+				tcpResponse.getAndSend(trame, trameType, ADRESSE_MAC, link)
 							
 		elif 'F' in trame.sprintf('%TCP.flags%'):
 			# Receive FIN flag : send FIN/ACK

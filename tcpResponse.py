@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from scapy.all import *
+import re
 
 ADRESSE_IP = "192.168.1.42"
 
@@ -13,6 +14,9 @@ _IMAP = 'imap'
 _HTTP_200 = "200"
 _HTTP_400 = "400"
 _HTTP_404 = "404"
+
+reg_httpGetRoot = re.compile(r"GET / HTTP(.*)")
+reg_httpGetDefault = re.compile(r"GET /(.*) HTTP(.*)")
 
 class TcpService:
 	def __init__(self, portNumber, header):
@@ -37,21 +41,23 @@ def sendPaquet(trame, link):
 
 def ackAndSend(trame, proto, ADRESSE_MAC, link):
 	clientMacAdress = trame.src
+	clientIpAdress = trame['IP'].src
 	print "Receiving TCP ACK segment from %s@%s on port %d"%(clientIpAdress,clientMacAdress,trame['TCP'].dport)
 	size = trame['IP'].len - (trame['IP'].ihl*4 + trame['TCP'].dataofs*4 )
 	ackValue = int(trame['TCP'].seq)+size
 			
 	response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-	response = response/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='PA',seq=int(trame['TCP'].ack),ack=ackValue)/tcpServices[proto]
+	response = response/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='PA',seq=int(trame['TCP'].ack),ack=ackValue)/tcpServices[proto].header
 	sendPaquet(response,link)
 			
 	response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-	response = response/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='FA',seq=int(trame['TCP'].ack)+len(tcpServices[proto]),ack=ackValue)
+	response = response/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='FA',seq=int(trame['TCP'].ack)+len(tcpServices[proto].header),ack=ackValue)
 	sendPaquet(response,link)
 
 def getAndSend(trame, proto, ADRESSE_MAC, link):
 # Receive PUSH flag : Http request.
 	clientMacAdress = trame.src
+	clientIpAdress = trame['IP'].src
 	print "Receiving TCP PUSH segment from %s@%s on port %d"%(clientIpAdress,clientMacAdress, trame['TCP'].dport)
 	size = trame['IP'].len - (trame['IP'].ihl*4 + trame['TCP'].dataofs*4 )
 	request = trame.sprintf('%TCP.payload%')[:size]
@@ -62,28 +68,28 @@ def getAndSend(trame, proto, ADRESSE_MAC, link):
 	result = reg_httpGetRoot.search(request)
 	if(result):
 		response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-		response = response/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='PA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+size)/tcpServices[_HTTP_200]
+		response = response/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='PA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+size)/tcpServices[_HTTP_200].header
 		sendPaquet(response,link)
 
 		response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-		response = response/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='FA',seq=int(trame['TCP'].ack)+len(tcpServices[_HTTP_200]),ack=int(trame['TCP'].seq)+1)
+		response = response/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='FA',seq=int(trame['TCP'].ack)+len(tcpServices[_HTTP_200].header),ack=int(trame['TCP'].seq)+1)
 		sendPaquet(response,link)
 	else:
 		result = reg_httpGetDefault.search(request)
 		if(result):
 			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-			response = response/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='PA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+size)/tcpServices[_HTTP_404]
+			response = response/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='PA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+size)/tcpServices[_HTTP_404].header
 			sendPaquet(response,link)
 
 			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-			response = response/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='FA',seq=int(trame['TCP'].ack)+len(tcpServices[_HTTP_404]),ack=int(trame['TCP'].seq)+1)
+			response = response/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='FA',seq=int(trame['TCP'].ack)+len(tcpServices[_HTTP_404].header),ack=int(trame['TCP'].seq)+1)
 			sendPaquet(response,link)
 		else:
 			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-			response = response/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='PA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+size)/tcpServices[_HTTP_400]
+			response = response/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='PA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+size)/tcpServices[_HTTP_400].header
 			sendPaquet(response,link)
 
 			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-			response = response/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='FA',seq=int(trame['TCP'].ack)+len(tcpServices[_HTTP_400]),ack=int(trame['TCP'].seq)+1)
+			response = response/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='FA',seq=int(trame['TCP'].ack)+len(tcpServices[_HTTP_400].header),ack=int(trame['TCP'].seq)+1)
 			sendPaquet(response,link)		
 	
