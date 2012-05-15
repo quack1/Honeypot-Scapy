@@ -41,7 +41,7 @@ _SMTP_HEADER = "220 %s ESMTP Postfix (2.0.13) (Debian Linux)\r\n"%(ADRESSE_IP)
 _LOG_DIR = "./log/"
 _IMAP_HEADER = '* OK 192.168.1.42 Cyrus IMAP v2.3.2-Debian-2.3.2 server ready\r\n'
 _FTP_HEADER = "220---------- Welcome to Pure-FTPd [privsep] [TLS] ----------\r\n"
-_HTTP_200 = "HTTP/1.0 200 ok\r\nServer: Apache/2.0.46 (Unix) (Debian/Linux)\r\nContent-type: text/html\r\n\r\n<html><body><h1>It works!</h1>\r\n<p>This is the default web page for this server.</p>\r\n<p>The web server software is running but no content has been added, yet.</p>\r\n</body></html>\r\n"
+_HTTP_200 = 'HTTP/1.0 200 ok\r\nServer: Apache/2.0.46 (Unix) (Debian/Linux)\r\nContent-type: text/html\r\n\r\n<html><head><title>Welcome to nginx!</title></head><body bgcolor="white" text="black"><center><h1>Welcome to nginx!</h1></center></body></html>\r\n'
 _HTTP_404 = "HTTP/1.0 404 Not Found \r\nServer: Apache/2.0.46 (Unix) (Debian/Linux)\r\nContent-type: text/html\r\n\r\n"
 _HTTP_400 = "HTTP/1.0 400 Bad Request \r\nServer: Apache/2.0.46 (Unix) (Debian/Linux)\r\nContent-type: text/html\r\n\r\n"
 
