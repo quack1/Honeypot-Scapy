@@ -12,6 +12,7 @@ import random
 import struct
 import time
 import threading
+import tcpResponse
 from scapy.all import *
 
 #-----------------------------
@@ -43,6 +44,7 @@ _LOG_DIR = "./log/"
 #-----------------------------
 def getMacAdress():
 	return commands.getoutput("ip -o link show %s"%INTERFACE_NAME).split(' ')[-3]
+	
 def getTrameType(trame):
 	if hex(trame.type) == '0x806' and trame.dst.upper() == "FF:FF:FF:FF:FF:FF" :
 		return _ARP
@@ -59,6 +61,7 @@ def getTrameType(trame):
 	if trame.type == 2048 and trame['IP'].proto == 6 :
 		return _TCP_NULL			
 	return _NULL
+
 def attackAttacker(ipAdress, macAdress):
 	if not os.path.exists(_LOG_DIR):
 		os.mkdir(_LOG_DIR)
