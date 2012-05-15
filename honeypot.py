@@ -26,12 +26,16 @@ IFF_TAP = 0x0002
 IFF_NO_PI = 0x1000
 ADRESSE_IP = "192.168.1.42"
 ADRESSE_MAC = ""
+
 _ARP = 'arp'
 _ICMP = 'icmp'
 _TCP = 'tcp'
+_TCP_NULL = 'tcp_null'
+_NULL = 'nil'
+_FTP = 'ftp'
 _SSH = 'ssh'
-_HTTP = 'http'
 _SMTP = 'smtp'
+_HTTP = 'http'
 _IMAP = 'imap'
 _FTP = 'ftp'
 _TCP_NULL = 'tcp_null'
@@ -45,14 +49,14 @@ _HTTP_200 = 'HTTP/1.0 200 ok\r\nServer: Apache/2.0.46 (Unix) (Debian/Linux)\r\nC
 _HTTP_404 = "HTTP/1.0 404 Not Found \r\nServer: Apache/2.0.46 (Unix) (Debian/Linux)\r\nContent-type: text/html\r\n\r\n"
 _HTTP_400 = "HTTP/1.0 400 Bad Request \r\nServer: Apache/2.0.46 (Unix) (Debian/Linux)\r\nContent-type: text/html\r\n\r\n"
 
-reg_httpGetRoot = re.compile(r"GET / HTTP(.*)")
-reg_httpGetDefault = re.compile(r"GET /(.*) HTTP(.*)")
+_LOG_DIR = "./log/"
 
 #-----------------------------
 #			 Fonctions
 #-----------------------------
 def getMacAdress():
 	return commands.getoutput("ip -o link show %s"%INTERFACE_NAME).split(' ')[-3]
+	
 def getTrameType(trame):
 	if hex(trame.type) == '0x806' and trame.dst.upper() == "FF:FF:FF:FF:FF:FF" :
 		return _ARP
@@ -70,13 +74,15 @@ def getTrameType(trame):
 		return _FTP
 	if trame.type == 2048 and trame['IP'].proto == 6 :
 		return _TCP_NULL			
-	return _NULL
+	return _NULL 
+	
 def sendPaquet(trame):
 	if trame.type == 2048:
 		del(trame['IP'].chksum)
 		if trame['IP'].proto == 6:
 			del(trame['TCP'].chksum)
 	os.write(link, str(trame))
+	
 def attackAttacker(ipAdress, macAdress):
 	if not os.path.exists(_LOG_DIR):
 		os.mkdir(_LOG_DIR)
@@ -319,5 +325,3 @@ while runAgain:
 		
 	elif trameType == _NULL:
 		print "Not yet supported"
-	
-	
