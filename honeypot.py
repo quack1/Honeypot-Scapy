@@ -26,24 +26,19 @@ IFF_TAP = 0x0002
 IFF_NO_PI = 0x1000
 ADRESSE_IP = "192.168.1.42"
 ADRESSE_MAC = ""
+
 _ARP = 'arp'
 _ICMP = 'icmp'
 _TCP = 'tcp'
-_SSH = 'ssh'
-_HTTP = 'http'
-_SMTP = 'smtp'
-_IMAP = 'imap'
-_FTP = 'ftp'
 _TCP_NULL = 'tcp_null'
 _NULL = 'nil'
-_SSH_HEADER = "SSH-2.0-OpenSSH_5.9p1 Debian-5ubuntu1\r\n"
-_SMTP_HEADER = "220 %s ESMTP Postfix (2.0.13) (Debian Linux)\r\n"%(ADRESSE_IP)
+_FTP = 'ftp'
+_SSH = 'ssh'
+_SMTP = 'smtp'
+_HTTP = 'http'
+_IMAP = 'imap'
+
 _LOG_DIR = "./log/"
-_IMAP_HEADER = '* OK 192.168.1.42 Cyrus IMAP v2.3.2-Debian-2.3.2 server ready\r\n'
-_FTP_HEADER = "220---------- Welcome to Pure-FTPd [privsep] [TLS] ----------\r\n"
-_HTTP_200 = "HTTP/1.0 200 ok\r\nServer: Apache/2.0.46 (Unix) (Debian/Linux)\r\nContent-type: text/html\r\n\r\n<html><body><h1>It works!</h1>\r\n<p>This is the default web page for this server.</p>\r\n<p>The web server software is running but no content has been added, yet.</p>\r\n</body></html>\r\n"
-_HTTP_404 = "HTTP/1.0 404 Not Found \r\nServer: Apache/2.0.46 (Unix) (Debian/Linux)\r\nContent-type: text/html\r\n\r\n"
-_HTTP_400 = "HTTP/1.0 400 Bad Request \r\nServer: Apache/2.0.46 (Unix) (Debian/Linux)\r\nContent-type: text/html\r\n\r\n"
 
 reg_httpGetRoot = re.compile(r"GET / HTTP(.*)")
 reg_httpGetDefault = re.compile(r"GET /(.*) HTTP(.*)")
@@ -130,187 +125,36 @@ while runAgain:
 		sendPaquet(response)
 		
 		
-	elif trameType == _SSH:
-		# Receive a TCP segment, on port 22
+	elif trameType in (_FTP, _SSH, 	_SMTP, _HTTP, _IMAP):
 		clientIpAdress = trame['IP'].src
 		
 		if trame.sprintf('%TCP.flags%') == 'S':
 			# Receive SYN flag : send SYN/ACK
-			print "Receiving TCP SYN request from %s@%s on SSH port 22"%(clientIpAdress,clientMacAdress)
+			print "Receiving TCP SYN request from %s@%s on port %s"%(clientIpAdress,clientMacAdress, trame['TCP'].dport)
 			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-			response = response/TCP(dport=trame['TCP'].sport,sport=22,flags='SA',seq=random.randint(1,45536),ack=int(trame['TCP'].seq)+1)
+			response = response/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='SA',seq=random.randint(1,45536),ack=int(trame['TCP'].seq)+1)
 			sendPaquet(response)
-			
+					
 		elif trame.sprintf('%TCP.flags%') == 'A':
-			# Receive ACK flag : Send server banner, and then stop connexion
-			print "Receiving TCP ACK segment from %s@%s on SSH port 22"%(clientIpAdress,clientMacAdress)
-			size = trame['IP'].len - (trame['IP'].ihl*4 + trame['TCP'].dataofs*4 )
-			ackValue = int(trame['TCP'].seq)+size
-			
+			if trameType in (_SSH, _SMTP, _IMAP, _FTP):
+				tcpResponse.ackAndSend(trame, trameType)
+			elif trameType in(_HTTP):
+				tcpReponse.getAndSend(trame, trameType)
+							
+		elif trame.sprintf('%TCP.flags%') == "FA":
+			# Receive FIN flag : send FIN/ACK
+			print "Receiving TCP FIN-ACK request from %s@%s on port %s"%(clientIpAdress,clientMacAdress, trame['TCP'].dport)
 			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-			response = response/TCP(dport=trame['TCP'].sport,sport=22,flags='PA',seq=int(trame['TCP'].ack),ack=ackValue)/_SSH_HEADER
+			response = response/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='A',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+1)
 			sendPaquet(response)
-			
-			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-			response = response/TCP(dport=trame['TCP'].sport,sport=22,flags='FA',seq=int(trame['TCP'].ack)+len(_SSH_HEADER),ack=ackValue)
-			sendPaquet(response)
-			
+							
 		elif 'F' in trame.sprintf('%TCP.flags%'):
 			# Receive FIN flag : send FIN/ACK
-			print "Receiving TCP FIN request from %s@%s on SSH port 22"%(clientIpAdress,clientMacAdress)
+			print "Receiving TCP FIN request from %s@%s on port %s"%(clientIpAdress,clientMacAdress, trame['TCP'].dport)
 			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-			response = response/TCP(dport=trame['TCP'].sport,sport=22,flags='FA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+1)
+			response = response/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='FA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+1)
 			sendPaquet(response)
-			
-
-	elif trameType == _HTTP:
-		# Receive a TCP segment, on port 80
-		clientIpAdress = trame['IP'].src
-		print "Receiving TCP on port 80,http"
-		
-		if trame.sprintf('%TCP.flags%') == 'S':
-			# Receive SYN flag : send SYN/ACK
-			print "Receiving TCP SYN request from %s@%s on HTTP port 80"%(clientIpAdress,clientMacAdress)
-			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-			response = response/TCP(dport=trame['TCP'].sport,sport=80,flags='SA',seq=random.randint(1,45536),ack=int(trame['TCP'].seq)+1)
-			sendPaquet(response)
-			
-		elif trame.sprintf('%TCP.flags%') == 'A':
-			# Receive ACK flag.
-			print "Receiving TCP ACK segment from %s@%s on HTTP port 80"%(clientIpAdress,clientMacAdress)
-			size = trame['IP'].len - (trame['IP'].ihl*4 + trame['TCP'].dataofs*4 )
-			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-			response = response/TCP(dport=trame['TCP'].sport,sport=80,flags='PA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+size)
-			sendPaquet(response)
-			
-		elif "P" in trame.sprintf('%TCP.flags%') :
-			# Receive PUSH flag : Http request.
-			print "Receiving TCP PUSH segment from %s@%s on HTTP port 80"%(clientIpAdress,clientMacAdress)
-			size = trame['IP'].len - (trame['IP'].ihl*4 + trame['TCP'].dataofs*4 )
-			request = trame.sprintf('%TCP.payload%')[:size]
-			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-			response = response/TCP(dport=trame['TCP'].sport,sport=80,flags='A',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+size)
-			sendPaquet(response)
-
-			result = reg_httpGetRoot.search(request)
-			if(result):
-				response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-				response = response/TCP(dport=trame['TCP'].sport,sport=80,flags='PA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+size)/_HTTP_200
-				sendPaquet(response)
-
-				response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-				response = response/TCP(dport=trame['TCP'].sport,sport=80,flags='FA',seq=int(trame['TCP'].ack)+len(_HTTP_200),ack=int(trame['TCP'].seq)+1)
-				sendPaquet(response)
-			else:
-				result = reg_httpGetDefault.search(request)
-				if(result):
-					response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-					response = response/TCP(dport=trame['TCP'].sport,sport=80,flags='PA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+size)/_HTTP_404
-					sendPaquet(response)
-
-					response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-					response = response/TCP(dport=trame['TCP'].sport,sport=80,flags='FA',seq=int(trame['TCP'].ack)+len(_HTTP_404),ack=int(trame['TCP'].seq)+1)
-					sendPaquet(response)
-				else:
-					response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-					response = response/TCP(dport=trame['TCP'].sport,sport=80,flags='PA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+size)/_HTTP_400
-					sendPaquet(response)
-
-					response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-					response = response/TCP(dport=trame['TCP'].sport,sport=80,flags='FA',seq=int(trame['TCP'].ack)+len(_HTTP_400),ack=int(trame['TCP'].seq)+1)
-					sendPaquet(response)
-		
-	elif trameType == _SMTP:
-		# Receive a TCP segment, on port 25
-		clientIpAdress = trame['IP'].src
-		
-		if trame.sprintf('%TCP.flags%') == 'S':
-			# Receive SYN flag : send SYN/ACK
-			print "Receiving TCP SYN request from %s@%s on SMTP port 25"%(clientIpAdress,clientMacAdress)
-			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-			response = response/TCP(dport=trame['TCP'].sport,sport=25,flags='SA',seq=random.randint(1,45536),ack=int(trame['TCP'].seq)+1)
-			sendPaquet(response)
-			
-		elif trame.sprintf('%TCP.flags%') == 'A':
-			# Receive ACK flag : Send server banner, and then stop connexion
-			print "Receiving TCP ACK segment from %s@%s on SMTP port 25"%(clientIpAdress,clientMacAdress)
-			size = trame['IP'].len - (trame['IP'].ihl*4 + trame['TCP'].dataofs*4 )
-			ackValue = int(trame['TCP'].seq)+size
-			
-			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-			response = response/TCP(dport=trame['TCP'].sport,sport=25,flags='PA',seq=int(trame['TCP'].ack),ack=ackValue)/_SMTP_HEADER
-			sendPaquet(response)
-			
-			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-			response = response/TCP(dport=trame['TCP'].sport,sport=25,flags='FA',seq=int(trame['TCP'].ack)+len(_SMTP_HEADER),ack=ackValue)
-			sendPaquet(response)
-		
-		
-	elif trameType == _IMAP:
-		# Receive a TCP segment, on port 143
-		clientIpAdress = trame['IP'].src
-		
-		if trame.sprintf('%TCP.flags%') == 'S':
-			# Receive SYN flag : send SYN/ACK
-			print "Receiving TCP SYN request from %s@%s on IMAP port 143"%(clientIpAdress,clientMacAdress)
-			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-			response = response/TCP(dport=trame['TCP'].sport,sport=143,flags='SA',seq=random.randint(1,45536),ack=int(trame['TCP'].seq)+1)
-			sendPaquet(response)
-			
-		elif trame.sprintf('%TCP.flags%') == 'A':
-			# Receive ACK flag : Send server banner, and then stop connexion
-			print "Receiving TCP ACK segment from %s@%s on IMAP port 143"%(clientIpAdress,clientMacAdress)
-			size = trame['IP'].len - (trame['IP'].ihl*4 + trame['TCP'].dataofs*4 )
-			ackValue = int(trame['TCP'].seq)+size
-			
-			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-			response = response/TCP(dport=trame['TCP'].sport,sport=143,flags='PA',seq=int(trame['TCP'].ack),ack=ackValue)/_IMAP_HEADER
-			sendPaquet(response)
-			
-			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-			response = response/TCP(dport=trame['TCP'].sport,sport=143,flags='FA',seq=int(trame['TCP'].ack)+len(_IMAP_HEADER),ack=ackValue)
-			sendPaquet(response)
-			
-		elif 'F' in trame.sprintf('%TCP.flags%'):
-			# Receive FIN flag : send FIN/ACK
-			print "Receiving TCP FIN request from %s@%s on IMAP port 143"%(clientIpAdress,clientMacAdress)
-			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-			response = response/TCP(dport=trame['TCP'].sport,sport=143,flags='FA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+1)
-			sendPaquet(response)
-		
-		
-	elif trameType == _FTP:
-		# Receive a TCP segment, on port 21
-		clientIpAdress = trame['IP'].src
-		
-		if trame.sprintf('%TCP.flags%') == 'S':
-			# Receive SYN flag : send SYN/ACK
-			print "Receiving TCP SYN request from %s@%s on FTP port 21"%(clientIpAdress,clientMacAdress)
-			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-			response = response/TCP(dport=trame['TCP'].sport,sport=21,flags='SA',seq=random.randint(1,45536),ack=int(trame['TCP'].seq)+1)
-			sendPaquet(response)
-			
-		elif trame.sprintf('%TCP.flags%') == 'A':
-			# Receive ACK flag : Send server banner, and then stop connexion
-			print "Receiving TCP ACK segment from %s@%s on FTP port 21"%(clientIpAdress,clientMacAdress)
-			size = trame['IP'].len - (trame['IP'].ihl*4 + trame['TCP'].dataofs*4 )
-			ackValue = int(trame['TCP'].seq)+size
-			
-			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-			response = response/TCP(dport=trame['TCP'].sport,sport=21,flags='PA',seq=int(trame['TCP'].ack),ack=ackValue)/_FTP_HEADER
-			sendPaquet(response)
-			
-			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-			response = response/TCP(dport=trame['TCP'].sport,sport=21,flags='FA',seq=int(trame['TCP'].ack)+len(_FTP_HEADER),ack=ackValue)
-			sendPaquet(response)
-			
-		elif 'F' in trame.sprintf('%TCP.flags%'):
-			# Receive FIN flag : send FIN/ACK
-			print "Receiving TCP FIN request from %s@%s on FTP port 21"%(clientIpAdress,clientMacAdress)
-			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
-			response = response/TCP(dport=trame['TCP'].sport,sport=21,flags='FA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+1)
-			sendPaquet(response)
-	
+					
 	
 	elif trameType == _TCP_NULL:
 		# Receive a TCP segment, on an unsupported port : send a Reset-Ack segment
@@ -318,9 +162,8 @@ while runAgain:
 		print "Receiving TCP Syn request from %s@%s on an unsupported port %d"%(clientIpAdress,clientMacAdress,trame['TCP'].dport)
 		response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='RA',ack=int(trame['TCP'].seq)+1)
 		sendPaquet(response)
-		
+
 		
 	elif trameType == _NULL:
 		print "Not yet supported"
-	
 	
