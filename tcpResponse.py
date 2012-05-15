@@ -3,6 +3,8 @@
 
 from scapy.all import *
 
+ADRESSE_IP = "192.168.1.42"
+
 _FTP = 'ftp'
 _SSH = 'ssh'
 _SMTP = 'smtp'
@@ -26,60 +28,62 @@ tcpServices[_HTTP_400] = TcpService(80,"HTTP/1.0 404 Not Found \r\nServer: Apach
 tcpServices[_HTTP_404] = TcpService(80,"HTTP/1.0 400 Bad Request \r\nServer: Apache/2.0.46 (Unix) (Debian/Linux)\r\nContent-type: text/html\r\n\r\n")
 tcpServices[_IMAP] = TcpService(143,'* OK 192.168.1.42 Cyrus IMAP v2.3.2-Debian-2.3.2 server ready\r\n')
 
-def sendPaquet(trame):
+def sendPaquet(trame, link):
 	if trame.type == 2048:
 		del(trame['IP'].chksum)
 		if trame['IP'].proto == 6:
 			del(trame['TCP'].chksum)
 	os.write(link, str(trame))
 
-def ackAndSend(trame, proto):
+def ackAndSend(trame, proto, ADRESSE_MAC, link):
+	clientMacAdress = trame.src
 	print "Receiving TCP ACK segment from %s@%s on port %d"%(clientIpAdress,clientMacAdress,trame['TCP'].dport)
 	size = trame['IP'].len - (trame['IP'].ihl*4 + trame['TCP'].dataofs*4 )
 	ackValue = int(trame['TCP'].seq)+size
 			
 	response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
 	response = response/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='PA',seq=int(trame['TCP'].ack),ack=ackValue)/tcpServices[proto]
-	sendPaquet(response)
+	sendPaquet(response,link)
 			
 	response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
 	response = response/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='FA',seq=int(trame['TCP'].ack)+len(tcpServices[proto]),ack=ackValue)
-	sendPaquet(response)
+	sendPaquet(response,link)
 
-def getAndSend(trame, proto):
+def getAndSend(trame, proto, ADRESSE_MAC, link):
 # Receive PUSH flag : Http request.
+	clientMacAdress = trame.src
 	print "Receiving TCP PUSH segment from %s@%s on port %d"%(clientIpAdress,clientMacAdress, trame['TCP'].dport)
 	size = trame['IP'].len - (trame['IP'].ihl*4 + trame['TCP'].dataofs*4 )
 	request = trame.sprintf('%TCP.payload%')[:size]
 	response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
 	response = response/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='A',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+size)
-	sendPaquet(response)
+	sendPaquet(response,link)
 
 	result = reg_httpGetRoot.search(request)
 	if(result):
 		response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
 		response = response/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='PA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+size)/tcpServices[_HTTP_200]
-		sendPaquet(response)
+		sendPaquet(response,link)
 
 		response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
 		response = response/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='FA',seq=int(trame['TCP'].ack)+len(tcpServices[_HTTP_200]),ack=int(trame['TCP'].seq)+1)
-		sendPaquet(response)
+		sendPaquet(response,link)
 	else:
 		result = reg_httpGetDefault.search(request)
 		if(result):
 			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
 			response = response/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='PA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+size)/tcpServices[_HTTP_404]
-			sendPaquet(response)
+			sendPaquet(response,link)
 
 			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
 			response = response/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='FA',seq=int(trame['TCP'].ack)+len(tcpServices[_HTTP_404]),ack=int(trame['TCP'].seq)+1)
-			sendPaquet(response)
+			sendPaquet(response,link)
 		else:
 			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
 			response = response/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='PA',seq=int(trame['TCP'].ack),ack=int(trame['TCP'].seq)+size)/tcpServices[_HTTP_400]
-			sendPaquet(response)
+			sendPaquet(response,link)
 
 			response = Ether(src=ADRESSE_MAC,dst=clientMacAdress)/IP(src=ADRESSE_IP,dst=clientIpAdress)
 			response = response/TCP(dport=trame['TCP'].sport,sport=trame['TCP'].dport,flags='FA',seq=int(trame['TCP'].ack)+len(tcpServices[_HTTP_400]),ack=int(trame['TCP'].seq)+1)
-			sendPaquet(response)		
+			sendPaquet(response,link)		
 	
